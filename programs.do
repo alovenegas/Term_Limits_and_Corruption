@@ -35,7 +35,7 @@ replace term = 0 if inlist(municipality,"BAGACES","CAÑAS","RIO CUARTO","PUNTARE
 replace term = 0 if inlist(municipality,"MATINA","UPALA","GOLFITO","LA CRUZ","TALAMANCA")
 
 * Went to congress
-replace term = 1 if inlist(municipality,"CAÑAS","DESAMPARADOS","SARAPIQUI","BELEN")
+*replace term = 1 if inlist(municipality,"CAÑAS","DESAMPARADOS","SARAPIQUI","BELEN")
 
 * Retired
 replace term = 1 if inlist(municipality,"SAN CARLOS")
@@ -51,10 +51,10 @@ end
 
 program reelec
 cap drop reelec
-gen reelec = 0
-replace reelec = 1 if inlist(municipality,"HEREDIA","ABANGARES","LA UNION","PALMARES","PARAISO","PURISCAL","RIO CUARTO","SARAPIQUI","GOLFITO")
-replace reelec = 1 if inlist(municipality,"MATINA","SAN PABLO","TALAMANCA","UPALA","LIBERIA","OREAMUNO","POCOCI","CARTAGO","SARCHI")
-replace reelec = 1 if inlist(municipality,"MORA","SANTA CRUZ","NICOYA","ALAJUELA","LA CRUZ","BARVA","SANTO DOMINGO")
+gen reelec = 1
+replace reelec = 0 if inlist(municipality,"HEREDIA","ABANGARES","LA UNION","PALMARES","PARAISO","PURISCAL","RIO CUARTO","SARAPIQUI","GOLFITO")
+replace reelec = 0 if inlist(municipality,"MATINA","SAN PABLO","TALAMANCA","UPALA","LIBERIA","OREAMUNO","POCOCI","CARTAGO","SARCHI")
+replace reelec = 0 if inlist(municipality,"MORA","SANTA CRUZ","NICOYA","ALAJUELA","LA CRUZ","BARVA","SANTO DOMINGO")
 end
 
 

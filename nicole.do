@@ -1,9 +1,9 @@
 * Corruption and Term Limits: Costa Rica
-* Alonso Venegas Cantillano
+* Alonso Venegas-Cantillano
 * Analysis and Policy in Economics
 * Paris School of Economics
 
-cd "C:\Users\alove\Desktop\thesis"
+cd "C:/Users/alove/Desktop/thesis"
 include "codes/programs.do"
 
 * Prepare temp files from raw data
@@ -43,13 +43,14 @@ tab rep_id
 import delimited "data\raw\fecha_ingreso_munis.csv", clear varnames(1)
 drop v1
 rename nombre_institucion municipality
+replace municipality = strupper(municipality)
+keep if strpos(municipality,"MUNICIPALIDAD")
+drop if strpos(municipality,"FEDERACIóN")
 clean_mun
 replace fecha_ingreso = substr(fecha_ingreso,1,10)
-gen ingreso = date(fecha_ingreso,"YMD")
-format ingreso %td
-keep municipality ingreso
-keep if strpos(municipality,"MUNICIPALIDAD")
-drop if strpos(municipality,"FEDERACION")
+gen fecha_ingreso1 = date(fecha_ingreso,"YMD")
+format fecha_ingreso1 %td
+keep municipality fecha_ingreso1
 recast str20 municipality 
 save data/temp/fecha_ingreso, replace
 
@@ -70,6 +71,35 @@ rename date month
 
 save data/temp/exchange_rate, replace
 
+
+*** Income of municipalities
+import delimited "data\raw\income2020.csv", clear
+save data/temp/income, replace
+
+forvalues i = 2021/2024 {
+import delimited "data/raw/income`i'.csv", clear
+append using data/temp/income
+save data/temp/income, replace
+}
+rename inst municipality
+clean_mun
+drop if strpos(municipality,"COMITE")
+drop if strpos(municipality,"FEDERACION")
+drop if strpos(municipality,"JUNTA")
+drop if strpos(municipality,"UNION")
+
+save data/temp/income, replace
+
+*** Price index
+import excel "data/raw/price_index_bccr", firstrow clear
+keep month Nivel
+cap drop month1
+gen month1 = monthly(month,"YM")
+drop month
+rename month1 month
+format month %tm
+save data/temp/price_index, replace
+
 *****
 * SICOP CONTRACTS
 *****
@@ -84,21 +114,20 @@ import excel "data/raw/sicop3.xlsx", sheet("Export") firstrow clear
 append using data/final/sicop
 save data/final/sicop, replace
 
-rename (Institución NúmerodeProcedimiento CéduladeProveedorAdjudicado) (municipality tender_id firm_id)
+rename (Institución NúmerodeProcedimiento CéduladeProveedorAdjudicado Línea) (municipality tender_id firm_id line)
 replace municipality = strupper(municipality)
 
-sort tender_id Línea
+*keep only firm with more lines
+drop if line == .
 drop if municipality == ""
 
-bysort tender_id firm_id: gen tag = _N
-replace tag = -tag 
-sort tender_id tag
-drop tag
+egen ID = group(tender_id municipality firm_id) 
 
-collapse (first) TipodeProcedimiento municipality DescripcióndeProcedimiento Códigodeproducto BienServicio Monedaadjudicada Fechasolicitudcontratación firm_id Cédularepresentante Representante TipoEmpresa ObjetodelGasto (sum) MontoAdjudicado, by(tender_id)
+collapse (first) tender_id TipodeProcedimiento municipality DescripcióndeProcedimiento Códigodeproducto BienServicio Monedaadjudicada Fechasolicitudcontratación firm_id Cédularepresentante Representante TipoEmpresa ObjetodelGasto (sum) MontoAdjudicado, by(ID)
 
 clean_mun
 treatment
+
 save data/temp/sicop, replace
 *********************************************************************
 
@@ -110,12 +139,12 @@ drop if _merge == 2
 drop _merge
 
 * Merge invited
-merge 1:1 tender_id using data/temp/invited
+merge m:1 tender_id using data/temp/invited
 drop if _merge ==2 
 drop _merge
 
 * Merge time variables
-merge 1:1 tender_id using data/temp/time, force
+merge m:1 tender_id using data/temp/time, force
 drop if _merge ==2 
 drop _merge
 
@@ -123,6 +152,7 @@ drop _merge
 merge m:1 municipality using data/temp/fecha_ingreso
 drop if _merge ==2 
 drop _merge
+
 
 **********************************************************************
 
@@ -147,10 +177,20 @@ format quarter %tq
 format month %tm 
 drop if tender_id == ""
 
+
+****  Fix prices with exchange rates and price index
 * Merge exchange rates
 merge m:1 month using data/temp/exchange_rate
 drop if _merge ==  2
+drop _merge
 replace MontoAdjudicado = MontoAdjudicado*venta if Monedaadjudicada == "USD"
+* Merge price index
+merge m:1 month using data/temp/price_index
+drop if _merge == 2
+drop _merge
+replace MontoAdjudicado = 100*(MontoAdjudicado/Nivel)
+
+
 
 ************ clean variables
 rename Cédularepresentante rep_id 
@@ -163,7 +203,8 @@ drop if _merge == 2
 gen donate = (_merge == 3)
 drop _merge
 
-gen time = (quarter>tq(2022q1))
+*TREATMENT: 8 April 2022 Carlos Alvarado signed the change in law
+gen time = (month>tq(2022m3))
 encode municipality, gen(mun_id)
 keep if inrange(date,td(1apr2020),td(1apr2024))
 
@@ -182,8 +223,11 @@ replace contract_type = 3 if contract_type == 8
 replace contract_type = 2 if contract_type == 9
 replace contract_type = 2 if contract_type == 10
 gen pyme = inlist(firm_type,3,5)
+gen direct = (contract_type == 1)
+
 ** Length of description
 gen len_description = strlen(DescripcióndeProcedimiento)
+
 ** Experience
 replace first_term = 2020 if first_term == 2022
 gen exp = year - first_term
@@ -196,9 +240,13 @@ replace age = age + 4 if year == 2024
 
 ** Treatment
 reelec
+cap drop time 
+gen time = 0
+replace time = 1 if date > td(08mar2022)
 gen treat = term*time
 gen treat2 = reelec*time
 
+* Log price of contract
 gen ln_price = ln(MontoAdjudicado)
 
 * gen days 
@@ -210,7 +258,6 @@ gen days_adj_contract = day(contract_date - adj_date)
 destring Porcentajederespuesta, replace
 rename Porcentajederespuesta perc_response
 drop if quarter == tq(2024q2)
-
 
 * Expenditure target
 cap drop exp_type exp_type_*
@@ -225,12 +272,19 @@ destring exp_type_3dig, replace
 
 * Save final data
 save data/final/final_dta, replace
+
+
 *********************************************************************
 *********************************************************************
+*********************************************************************
+* DESCRIPTIVE STATS
+*********************************************************************
+*********************************************************************
+*********************************************************************
+
 cap use data/final/final_dta, clear
 * Figure 1: Evolution of mean of bidders per month
 preserve
-keep if contract_type == 3
 drop if bidders == .
 bysort municipality: egen m_bid = mean(bidders)
 replace bidders = bidders - m_bid
@@ -247,7 +301,7 @@ collapse ofertas, by(term month)
 tw line ofertas month if term == 0 || line ofertas month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
 restore
 
-* Figure 2: Evolution of mean of invited per quarter
+* Figure 2: Evolution of mean of perc of response per quarter
 preserve
 drop if perc_response == .
 bysort municipality: egen m_bid = mean(perc_response)
@@ -309,108 +363,9 @@ collapse ln_price, by(term month)
 tw line ln_price month if term == 0 || line ln_price month if term == 1, tline(2022m3)
 restore
 
-
-********************* DID ********************************
-**********************************************************
-global outcomes days_contract days_adj bidders invitados perc_response donate len_description pyme
-
-estimates clear
-* BASIC DID
-foreach i in $outcomes {
-	
-	dis "Estimating effects for: `i'"
-	quiet areg `i' treat i.quarter, absorb(mun_id) cluster(mun_id)
-	estimates store `i'
-
-}
-esttab *, keep(treat)
-
-* BASIC DID - Controls
-estimates clear
-foreach i in $outcomes {
-	dis "Estimating effects for: `i'"
- quiet areg `i' treat ln_price i.contract_type i.firm_type i.quarter i.exp_type_1dig age, absorb(mun_id)  cluster(mun_id)
- estimates store `i'
-
-}
-
-esttab *, keep(treat age) 
-
-* BASIC DID - Controls with dynamic effects
-* gen placebo and dynamic
-cap drop event_time
-cap drop e_*
-gen event_time = month - tm(2022m3)
-
-gen e_m9 = (event_time == -9) * term
-gen e_m8 = (event_time == -8) * term
-gen e_m7 = (event_time == -7) * term
-gen e_m6 = (event_time == -6) * term
-gen e_m5 = (event_time == -5) * term
-gen e_m4 = (event_time == -4) * term
-gen e_m3 = (event_time == -3) * term
-gen e_m2 = (event_time == -2) * term
-gen e_m1 = (event_time == -1) * term
-gen e_m0 = (event_time == 0) * term //not included
-gen e_1 = (event_time == 1) * term
-gen e_2 = (event_time == 2) * term
-gen e_3 = (event_time == 3) * term
-gen e_4 = (event_time == 4) * term
-gen e_5 = (event_time == 5) * term
-gen e_6 = (event_time == 6) * term
-gen e_7 = (event_time == 7) * term
-gen e_8 = (event_time == 8) * term
-gen e_9 = (event_time == 9) * term
-
-estimates clear
-foreach i in $outcomes {
-areg `i' e_m9 e_m8 e_m7 e_m6 e_m5 e_m4 e_m3 e_m2 e_m0 e_1 e_2 e_3 e_4 e_5 e_6 e_7 e_8 e_9 ln_price i.contract_type i.firm_type i.exp_type_1dig i.short_month i.quarter, absorb(mun_id) cluster(mun_id)
-
-coefplot, keep(e_m9 e_m8 e_m7 e_m6 e_m5 e_m4 e_m3 e_m2 e_m0 e_1 e_2 e_3 e_4 e_5 e_6 e_7 e_8 e_9) vertical ///
-    xline(9, lcolor(red)) title("Event-Study: `i'") ///
-	ciopts(recast(rcap) lcolor(black))
-	sleep 10000
-}
-
-** ROBUSTNESS CHECKS FOR PERC OF RESPONSE ***
-* list of municipalities that incorporated last to SICOP
-drop if inlist(municipality,"ACOSTA","MONTES DE ORO","LA CRUZ","DOTA","LEON CORTES","RIO CUARTO","POCOCI","BAGACES")
-areg perc_response treat time i.short_month ln_price i.contract_type i.firm_type i.year, absorb(mun_id) cluster(mun_id)
-
-
-************ RANDOM TREATMENT CHECKS **************************
-quiet{
-forvalues i = 1(1)100 {
-use data/final/final_dta, replace
+** Figure 9: Evolution of mean firm size
 preserve
-tempfile test
-collapse term, by(mun_id)
-replace term = runiform(0,1)
-replace term = 0 if term < 0.5
-replace term = 1 if term >= 0.5
-save `test', replace 
+drop if pyme == .
+collapse pyme, by(term month)
+tw line pyme month if term == 0 || line pyme month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
 restore
-
-cap drop term
-cap drop _merge
-merge m:1 mun_id using `test'
-
-replace treat = term*time
-
-areg perc_response treat i.short_month ln_price i.contract_type i.firm_type i.year, absorb(mun_id) cluster(mun_id)
-
-global t = _b[treat]
-
-clear
-set obs 100
-cap use data/final/random_check, replace
-cap gen test = .
-replace test = $t if _n == `i'
-save data/final/random_check, replace
-noi dis `i'
-}
-}
-sort test
-gen n = _n 
-line n test, xline(-0.044, lcolor(red))
-

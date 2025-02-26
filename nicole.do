@@ -71,7 +71,6 @@ rename date month
 
 save data/temp/exchange_rate, replace
 
-
 *** Income of municipalities
 import delimited "data\raw\income2020.csv", clear
 save data/temp/income, replace
@@ -88,7 +87,44 @@ drop if strpos(municipality,"FEDERACION")
 drop if strpos(municipality,"JUNTA")
 drop if strpos(municipality,"UNION")
 
-save data/temp/income, replace
+* clean prices
+split ejecutado, parse(",")
+keep año cuenta descripc municipality ejecutado1
+replace ejecutado1 = subinstr(ejecutado,".","",.)
+destring ejecutado1, replace
+rename ejecutado1 ejecutado
+
+keep if inlist(descripcióncuenta,"INGRESOS DE CAPITAL","INGRESOS CORRIENTES")
+
+cap drop id
+egen id = group(municipality año)
+replace cuenta = substr(cuenta,1,1)
+drop descripc
+
+reshape wide ejecutado año, i(id) j(cuenta) string
+drop año2
+rename (ejecutado1 año1 ejecutado2) (corriente year capital)
+drop id
+treatment
+
+gen price_index = 100 if year == 2020
+replace price_index = 103.3 if year == 2021
+replace price_index = 111.44 if year == 2022
+replace price_index = 109.47 if year == 2023
+replace price_index = 110.39 if year == 2024
+
+replace corriente = ln(100*(corriente/price_index))
+replace capital = ln(100*(capital/price_index))
+
+reg corriente term#year
+reg capital term#year
+
+preserve
+collapse corriente capital  , by(term year)
+tw line corriente year if term == 0 || line capital year if term == 1
+tw line capital year if term == 0 || line capital year if term == 1
+restore
+save data/temp/mun_income, replace
 
 *** Price index
 import excel "data/raw/price_index_bccr", firstrow clear
@@ -99,6 +135,24 @@ drop month
 rename month1 month
 format month %tm
 save data/temp/price_index, replace
+
+******
+* Price changes
+******
+import delimited "data/raw/price_change.csv", clear 
+rename (númerodeprocedimiento v9 institución) (tender_id delta_p municipality)
+clean_mun
+duplicates drop tender_id, force
+keep tender_id municipality delta_p
+replace delta_p = subinstr(delta_p,"%","",.)
+destring delta_p, replace
+
+gen dif = valorcontrato  - presupuestoestimado
+
+replace delta_p = 0 if dif < 0
+
+save data/temp/price_change, replace
+
 
 *****
 * SICOP CONTRACTS
@@ -148,7 +202,7 @@ merge m:1 tender_id using data/temp/time, force
 drop if _merge ==2 
 drop _merge
 
-* Merge ingreso municipalidades
+* Merge incorporation date of local governments to procurement system
 merge m:1 municipality using data/temp/fecha_ingreso
 drop if _merge ==2 
 drop _merge
@@ -190,6 +244,9 @@ drop if _merge == 2
 drop _merge
 replace MontoAdjudicado = 100*(MontoAdjudicado/Nivel)
 
+* Merge municipalities income
+merge m:1 municipality year using data/temp/mun_income
+drop if _merge == 2
 
 
 ************ clean variables

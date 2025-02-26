@@ -12,7 +12,7 @@ estimates clear
 foreach i in $outcomes {
 	
 	dis "Estimating effects for: `i'"
-	qui reghdfe `i' treat, absorb(mun_id short_quarter year) cluster(mun_id)
+	reghdfe `i' treat, absorb(mun_id short_quarter year)
 	estimates store `i'
 }
 esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.001)
@@ -38,9 +38,10 @@ foreach i in $outcomes {
 	
 if  `i' == pyme | `i' == ln_price {
  dis "Estimating effects for: `i'"
- areg `i' treat i.short_quarter i.year , absorb(mun_id) cluster(mun_id)
+  reghdfe `i' treat, absorb(mun_id short_quarter year) cluster(mun_id)
  estimates store `i'
 } 
+
 else {
  dis "Estimating effects for: `i'"
  areg `i' treat i.short_quarter i.year ln_price i.firm_type  i.contract_type , absorb(mun_id) cluster(mun_id)

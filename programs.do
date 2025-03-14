@@ -60,19 +60,22 @@ end
 
 program region 
 gen region = 0
-replace region = 1 if inlist(municipality,"CENTRAL","ESCAZU","DESAMPARADOS","PURISCAL","ASERRI","MORA","TARRAZU","GOICOECHEA","SANTA ANA")
-replace region = 1 if inlist(municipality,"SANTA ANA","ALAJUELITA","VASQUEZ","ACOSTA","MORAVIA","TIBAS","MONTES DE OCA","DOTA","CURRIDABAT")
+/*
+replace region = 0 if inlist(municipality,"CENTRAL","ESCAZU","DESAMPARADOS","PURISCAL","ASERRI","MORA","TARRAZU","GOICOECHEA","SANTA ANA")
+replace region = 0 if inlist(municipality,"SANTA ANA","ALAJUELITA","VASQUEZ","ACOSTA","MORAVIA","TIBAS","MONTES DE OCA","DOTA","CURRIDABAT")
 replace region = 1 if inlist(municipality,"LEON CORTES","TURRUBARES","ALAJUELA","SAN RAMON","GRECIA","ATENAS","NARANJO","PALMARES","POAS")
 replace region = 1 if inlist(municipality,"ZARCERO","SARCHI","CARTAGO","PARAISO","LA UNION","JIMENEZ","TURRIALBA","ALVARADO","OREAMUNO")
 replace region = 1 if inlist(municipality,"OREAMUNO","EL GUARCO","HEREDIA","BARVA","SANTO DOMINGO","SANTA BARBARA","SAN RAFAEL")
 replace region = 1 if inlist(municipality,"SAN ISIDRIO","BELEN","FLORES","SAN PABLO")
-replace region = 2 if inlist(municipality,"LIBERIA","NICOYA","SANTA CRUZ","BAGACES","CARRILLO","CANAS","ABANGARES","TILARAN","NANDAYURE")
-replace region = 2 if inlist(municipality,"LA CRUZ","HOJANCHA")
-replace region = 3 if inlist(municipality,"PUNTARENAS","ESPARZA","QUEPOS","PARRITA","GARABITO","MONTEVERDE","MONTES DE ORO","SAN MATEO","OROTINA")
-replace region = 4 if inlist(municipality,"PEREZ ZELEDON","BUENOS AIRES","GOLFITO","OSA","COTO BRUS","CORREDORES","PUERTO JIMENEZ")
-replace region = 5 if inlist(municipality,"SAN CARLOS","LOS CHILES","RIO CUARTO","UPALA","GUATUSO","UPALA","SARAPIQUI")
-label define region 0 "Central" 1 "Chorotega" 2 "Pacifico Central" 3 "Brunca" 4 "Huetar Atl" 5 "Huetar Norte"
-label values region region
+*/
+replace region = 1 if inlist(municipality,"LIBERIA","NICOYA","SANTA CRUZ","BAGACES","CARRILLO","CANAS","ABANGARES","TILARAN","NANDAYURE")
+replace region = 1 if inlist(municipality,"LA CRUZ","HOJANCHA")
+replace region = 2 if inlist(municipality,"PUNTARENAS","ESPARZA","QUEPOS","PARRITA","GARABITO","MONTEVERDE","MONTES DE ORO","SAN MATEO","OROTINA")
+replace region = 3 if inlist(municipality,"PEREZ ZELEDON","BUENOS AIRES","GOLFITO","OSA","COTO BRUS","CORREDORES","PUERTO JIMENEZ")
+replace region = 5 if inlist(municipality,"LIMON","POCOCI","SIQUIRRES","TALAMANCA","MATINA","GUACIMO")
+replace region = 4 if inlist(municipality,"SAN CARLOS","LOS CHILES","RIO CUARTO","UPALA","GUATUSO","UPALA","SARAPIQUI")
+cap label define region 0 "Central" 1 "Chorotega" 2 "Pacifico Central" 3 "Brunca" 4 "Huetar Atl" 5 "Huetar Norte"
+cap label values region region
 end
 
 

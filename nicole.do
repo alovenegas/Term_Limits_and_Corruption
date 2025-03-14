@@ -136,23 +136,20 @@ rename month1 month
 format month %tm
 save data/temp/price_index, replace
 
-******
-* Price changes
-******
-import delimited "data/raw/price_change.csv", clear 
-rename (númerodeprocedimiento v9 institución) (tender_id delta_p municipality)
-clean_mun
-duplicates drop tender_id, force
-keep tender_id municipality delta_p
-replace delta_p = subinstr(delta_p,"%","",.)
-destring delta_p, replace
 
-gen dif = valorcontrato  - presupuestoestimado
+** Clean days to deliver the service
+import excel "data/raw/delivery.xlsx", sheet("Export") firstrow clear
+keep Númerodeprocedimiento Cantidadsolicitada Cantidadentregada Cantidaddedíasadelantoatras CédulayNombredelcontratista
+rename (Númerodeprocedimiento Cantidadsolicitada Cantidadentregada Cantidaddedíasadelantoatras CédulayNombredelcontratista) (tender_id q_solicited q_delivered delay_days firm_id)
+drop if _n >= 110224
+recast str24 tender_id
+split firm_id, limit(1)
+drop firm_id
+rename firm_id1 firm_id
 
-replace delta_p = 0 if dif < 0
+collapse delay_days , by(tender_id firm_id)
 
-save data/temp/price_change, replace
-
+save data/temp/delivery, replace
 
 *****
 * SICOP CONTRACTS
@@ -198,7 +195,7 @@ drop if _merge ==2
 drop _merge
 
 * Merge time variables
-merge m:1 tender_id using data/temp/time, force
+merge m:1 tender_id using data/temp/time
 drop if _merge ==2 
 drop _merge
 
@@ -207,6 +204,10 @@ merge m:1 municipality using data/temp/fecha_ingreso
 drop if _merge ==2 
 drop _merge
 
+* Merge delay in days
+merge m:1 tender_id firm_id using data/temp/delivery
+drop if _merge == 2
+drop _merge
 
 **********************************************************************
 
@@ -218,7 +219,10 @@ foreach i in pub_date contract_date adj_date sol_tec_date res_tec_date {
 }
 rename *_f *
 
-
+foreach i in pub_date contract_date adj_date sol_tec_date res_tec_date {
+	codebook `i'
+}
+	
 * Date issues
 rename Fechasolicitudcontratación date
 gen year = year(date)
@@ -260,8 +264,6 @@ drop if _merge == 2
 gen donate = (_merge == 3)
 drop _merge
 
-*TREATMENT: 8 April 2022 Carlos Alvarado signed the change in law
-gen time = (month>tq(2022m3))
 encode municipality, gen(mun_id)
 keep if inrange(date,td(1apr2020),td(1apr2024))
 
@@ -274,7 +276,6 @@ keep if inrange(date,td(1apr2020),td(1apr2024))
 **  Tender type and firm size
 encode TipodeProcedimiento, gen(contract_type)
 encode TipoEmpresa, gen(firm_type)
-gen tender = inrange(contract_type,3,7)
 replace contract_type = 1 if contract_type == 7
 replace contract_type = 3 if contract_type == 8
 replace contract_type = 2 if contract_type == 9
@@ -295,16 +296,17 @@ replace age = age + 2 if year == 2022
 replace age = age + 3 if year == 2023
 replace age = age + 4 if year == 2024
 
-** Treatment
+*TREATMENT: 8 April 2022 Carlos Alvarado signed the change in law
 reelec
 cap drop time 
 gen time = 0
-replace time = 1 if date > td(08mar2022)
+replace time = 1 if quarter > tq(2022q1)
 gen treat = term*time
 gen treat2 = reelec*time
 
 * Log price of contract
-gen ln_price = ln(MontoAdjudicado)
+rename MontoAdjudicado price
+gen ln_price = ln(price)
 
 * gen days 
 gen days_contract = day(contract_date - pub_date)
@@ -346,7 +348,8 @@ drop if bidders == .
 bysort municipality: egen m_bid = mean(bidders)
 replace bidders = bidders - m_bid
 collapse bidders, by(term month)
-tw line bidders month if term == 0 || line bidders month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
+tw line bidders month if term == 0 || line bidders month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck")) graphregion(color(white))
+graph export "figures/lineplot_bidders.pdf", as(pdf) name(Graph) replace
 restore
 
 * Figure 2: Evolution of mean of invited per quarter
@@ -414,10 +417,10 @@ restore
 
 * Figure 8: Evolution of the price of contracts
 preserve 
-drop if inlist(municipality,"BELEN","SANTA ANA","ESCAZU","CURRIDABAT")
 cap gen one = 1
 collapse ln_price, by(term month)
-tw line ln_price month if term == 0 || line ln_price month if term == 1, tline(2022m3)
+tw line ln_price month if term == 0 || line ln_price month if term == 1, tline(2022m3) graphregion(color(white)) y("log(price)") legend(label(1 "First term") label(2 "Lame duck"))
+graph export "figures/lineplot_price.pdf", as(pdf) name(Graph) replace
 restore
 
 ** Figure 9: Evolution of mean firm size

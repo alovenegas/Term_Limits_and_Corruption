@@ -27,12 +27,13 @@ replace municipality = strtrim(municipality)
 end
 
 program treatment
+cap drop term
 gen term = 1
-replace term = 0 if inlist(municipality,"HEREDIA","BELEN","FLORES","CARTAGO","SAN PABLO","CURRIDABAT","SANTO DOMINGO","PALMARES","BARVA")
+replace term = 0 if inlist(municipality,"OROTINA","BELEN","FLORES","CARTAGO","SAN PABLO","CURRIDABAT","SANTO DOMINGO","PALMARES","BARVA")
 replace term = 0 if inlist(municipality,"SAN CARLOS","GRECIA","GOICOECHEA","LA UNION","ALAJUELA","POAS","TIBAS","DESAMPARADOS","OREAMUNO")
 replace term = 0 if inlist(municipality,"SARCHI","PARAISO","SANTA BARBARA","MORA","PURISCAL","SANTA CRUZ","POCOCI","LIBERIA","NICOYA")
 replace term = 0 if inlist(municipality,"BAGACES","CAÑAS","RIO CUARTO","PUNTARENAS","SARAPIQUI","QUEPOS","ABANGARES","DOTA","COTO BRUS")
-replace term = 0 if inlist(municipality,"MATINA","UPALA","GOLFITO","LA CRUZ","TALAMANCA")
+replace term = 0 if inlist(municipality,"MATINA","UPALA","GOLFITO","LA CRUZ","TALAMANCA","AGUIRRE")
 
 * Went to congress
 *replace term = 1 if inlist(municipality,"CAÑAS","DESAMPARADOS","SARAPIQUI","BELEN")
@@ -59,6 +60,7 @@ end
 
 
 program region 
+cap drop region
 gen region = 0
 /*
 replace region = 0 if inlist(municipality,"CENTRAL","ESCAZU","DESAMPARADOS","PURISCAL","ASERRI","MORA","TARRAZU","GOICOECHEA","SANTA ANA")
@@ -76,6 +78,58 @@ replace region = 5 if inlist(municipality,"LIMON","POCOCI","SIQUIRRES","TALAMANC
 replace region = 4 if inlist(municipality,"SAN CARLOS","LOS CHILES","RIO CUARTO","UPALA","GUATUSO","UPALA","SARAPIQUI")
 cap label define region 0 "Central" 1 "Chorotega" 2 "Pacifico Central" 3 "Brunca" 4 "Huetar Atl" 5 "Huetar Norte"
 cap label values region region
+end
+
+
+* Event study code
+program define q_event_study 
+	syntax, outcome(varlist) controls(varlist)
+	
+cap drop event_time
+cap drop e_*
+gen event_time = quarter - tq(2022q2)
+
+gen e_m4 = (event_time == -4) * term
+gen e_m3 = (event_time == -3) * term
+gen e_m2 = (event_time == -2) * term
+gen e_m1 = (event_time == -1) * term
+gen e_m0 = (event_time == 0) * term //not included
+gen e_1 = (event_time == 1) * term
+gen e_2 = (event_time == 2) * term
+gen e_3 = (event_time == 3) * term
+gen e_4 = (event_time == 4) * term
+gen e_5 = (event_time == 5) * term
+gen e_6 = (event_time == 6) * term
+
+estimates clear
+
+reghdfe `outcome' e_m4 e_m3 e_m2 e_m1 e_1 e_2 e_3 e_4 e_5 e_6, absorb(`controls') cluster(mun_id)
+
+// Store coefficients and standard errors
+matrix b = e(b)
+matrix V = e(V)
+
+// Insert omitted category (e_m0 = 0)
+matrix b = (b[1, 1..4], 0, b[1, 5..10]) 
+
+// Expand variance-covariance matrix to include e_m0
+matrix V = (V[1..4,1..4], J(4,1,0), V[1..4,5..10] \ ///
+            J(1,4,0), 0, J(1,6,0) \ ///
+            V[5..10,1..4], J(6,1,0), V[5..10,5..10]) 
+
+// Create a coefplot using stored coefficients
+coefplot (matrix(b), v(V)), ///
+         keep(e_m4 e_m3 e_m2 e_m1 e_m0 c5 e_1 e_2 e_3 e_4 e_5 e_6) ///
+         vertical omitted ///
+         coeflabels(e_m4 = "-4" e_m3 = "-3" e_m2 = "-2" e_m1 = "-1" ///
+                    c5 = "0" e_1 = "1" e_2 = "2" e_3 = "3" e_4 = "4" ///
+                    e_5 = "5" e_6 = "6") ///
+         xline(5, lcolor(red))  ///
+         ciopts(recast(rcap) lcolor(black)) ///
+         graphregion(color(white)) ytitle(`outcome') xtitle("Quarters from treatment")
+		
+	sleep 5000	
+
 end
 
 

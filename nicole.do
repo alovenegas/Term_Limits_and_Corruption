@@ -4,7 +4,7 @@
 * Paris School of Economics
 
 cd "C:/Users/alove/Desktop/thesis"
-include "codes/programs.do"
+include "C:\Users\alove\Documents\GitHub\Term_Limits_and_Corruption\programs.do"
 
 * Prepare temp files from raw data
 import excel "data/raw/bidders.xlsx", clear firstrow
@@ -23,14 +23,19 @@ recast str24 tender_id
 save data/temp/invited, replace
 
 * Contracts with time 
-import delimited "data\raw\Rtime.csv", clear varnames(1)
-drop v1
-rename numero_procedimiento tender_id
-recast str24 tender_id
+import excel "data/raw/days1.xlsx", sheet("Export") firstrow clear
 save data/temp/time, replace
+import excel "data/raw/days2.xlsx", sheet("Export") firstrow clear
+append using data/temp/time
+rename NúmeroProcedimiento tender_id
+
+drop if tender_id == ""
+collapse (mean) DifAperturaDías DifNotificaciónDías DifAdjudicaciónDías (first) FechaPublicaciónBase , by(tender_id)
+save "data/temp/time", replace
+
 
 * Donation data
-import excel "C:\Users\alove\Desktop\thesis\data\raw\acumulado_donations.xlsx", sheet("BBDD") firstrow clear
+import excel "data\raw\acumulado_donations.xlsx", sheet("BBDD") firstrow clear
 keep if TIPOCONTRIBUCIÓN == "EFECTIVO"
 keep if FECHA > td(01jan2020)
 rename (CÉDULA MONTO PARTIDOPOLÍTICO FECHA) (rep_id dntn dntn_pp dntn_date)
@@ -136,7 +141,6 @@ rename month1 month
 format month %tm
 save data/temp/price_index, replace
 
-
 ** Clean days to deliver the service
 import excel "data/raw/delivery.xlsx", sheet("Export") firstrow clear
 keep Númerodeprocedimiento Cantidadsolicitada Cantidadentregada Cantidaddedíasadelantoatras CédulayNombredelcontratista
@@ -174,7 +178,7 @@ drop if municipality == ""
 
 egen ID = group(tender_id municipality firm_id) 
 
-collapse (first) tender_id TipodeProcedimiento municipality DescripcióndeProcedimiento Códigodeproducto BienServicio Monedaadjudicada Fechasolicitudcontratación firm_id Cédularepresentante Representante TipoEmpresa ObjetodelGasto (sum) MontoAdjudicado, by(ID)
+collapse (first) tender_id TipodeProcedimiento municipality DescripcióndeProcedimiento Códigodeproducto BienServicio Monedaadjudicada Fechasolicitudcontratación firm_id Cédularepresentante Representante TipoEmpresa ObjetodelGasto (sum) MontoAdjudicado MontoUnitario, by(ID)
 
 clean_mun
 treatment
@@ -210,6 +214,7 @@ drop if _merge == 2
 drop _merge
 
 **********************************************************************
+/*
 
 foreach i in pub_date contract_date adj_date sol_tec_date res_tec_date {
 	replace `i' = substr(`i',1,10)
@@ -219,18 +224,23 @@ foreach i in pub_date contract_date adj_date sol_tec_date res_tec_date {
 }
 rename *_f *
 
+
 foreach i in pub_date contract_date adj_date sol_tec_date res_tec_date {
 	codebook `i'
 }
+*/
 	
 * Date issues
 rename Fechasolicitudcontratación date
 gen year = year(date)
 gen short_month = month(date)
 gen short_quarter = quarter(date)
+gen short_semester = halfyear(date)
 
 gen quarter = yq(year,short_quarter)
 gen month = ym(year,short_month)
+gen semester = yh(year,short_semester)
+
 format quarter %tq
 format month %tm 
 drop if tender_id == ""
@@ -242,11 +252,14 @@ merge m:1 month using data/temp/exchange_rate
 drop if _merge ==  2
 drop _merge
 replace MontoAdjudicado = MontoAdjudicado*venta if Monedaadjudicada == "USD"
+replace MontoUnitario = MontoUnitario*venta if Monedaadjudicada == "USD"
+
 * Merge price index
 merge m:1 month using data/temp/price_index
 drop if _merge == 2
 drop _merge
 replace MontoAdjudicado = 100*(MontoAdjudicado/Nivel)
+replace MontoUnitario = 100*(MontoUnitario/Nivel)
 
 * Merge municipalities income
 merge m:1 municipality year using data/temp/mun_income
@@ -299,19 +312,32 @@ replace age = age + 4 if year == 2024
 *TREATMENT: 8 April 2022 Carlos Alvarado signed the change in law
 reelec
 cap drop time 
-gen time = 0
-replace time = 1 if quarter > tq(2022q1)
-gen treat = term*time
-gen treat2 = reelec*time
+gen time_1 = 0
+replace time_1 = 1 if quarter > tq(2022q1)
+
+gen time_2 = 0
+replace time_2 = 1 if quarter > tq(2021q4)
+
+label var time_1 "After 2022q1"
+label var time_2 "After 2021q4"
+
+cap drop treat*
+gen treat11 = term*time_1
+gen treat21 = reelec*time_1
+gen treat12 = term*time_2
+gen treat22 = reelec*time_2
 
 * Log price of contract
-rename MontoAdjudicado price
+rename (MontoAdjudicado MontoUnitario) (price unit_price)
 gen ln_price = ln(price)
+gen ln_unit_price = ln(unit_price)
 
 * gen days 
+/*
 gen days_contract = day(contract_date - pub_date)
 gen days_adj = day(adj_date - pub_date)
 gen days_adj_contract = day(contract_date - adj_date)
+*/
 
 * porc respuesta
 destring Porcentajederespuesta, replace
@@ -342,6 +368,10 @@ save data/final/final_dta, replace
 *********************************************************************
 
 cap use data/final/final_dta, clear
+
+tabstat ln_price ln_unit_price bidders perc_response delay_days, by(year) s(mean sd median max min n)
+
+
 * Figure 1: Evolution of mean of bidders per month
 preserve
 drop if bidders == .
@@ -368,24 +398,6 @@ bysort municipality: egen m_bid = mean(perc_response)
 replace perc_response = perc_response - m_bid
 collapse perc_response, by(term month)
 tw line perc_response month if term == 0 || line perc_response month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
-restore
-
-* Figure 3: Evolution of mean of days to write contract
-preserve
-drop if days_contract == .
-bysort municipality: egen m_bid = mean(days_contract)
-replace days_contract = days_contract - m_bid
-collapse days_contract, by(term quarter)
-tw line days_contract quarter if term == 0 || line days_contract quarter if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
-restore
-
-* Figure 4: Evolution of mean of days to write contract
-preserve
-drop if days_adj == .
-bysort municipality: egen m_bid = mean(days_adj_contract)
-replace days_adj_contract = days_adj_contract - m_bid
-collapse days_adj, by(term month)
-tw line days_adj month if term == 0 || line days_adj month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
 restore
 
 
@@ -419,13 +431,13 @@ restore
 preserve 
 cap gen one = 1
 collapse ln_price, by(term month)
-tw line ln_price month if term == 0 || line ln_price month if term == 1, tline(2022m3) graphregion(color(white)) y("log(price)") legend(label(1 "First term") label(2 "Lame duck"))
+tw line ln_price month if term == 0 || line ln_price month if term == 1, tline(2022m3) graphregion(color(white)) legend(label(1 "First term") label(2 "Lame duck"))
 graph export "figures/lineplot_price.pdf", as(pdf) name(Graph) replace
 restore
 
 ** Figure 9: Evolution of mean firm size
 preserve
 drop if pyme == .
-collapse pyme, by(term month)
-tw line pyme month if term == 0 || line pyme month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
+collapse pyme, by(term quarter)
+tw line pyme quarter if term == 0 || line pyme quarter if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
 restore

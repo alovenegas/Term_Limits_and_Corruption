@@ -155,6 +155,15 @@ collapse delay_days , by(tender_id firm_id)
 
 save data/temp/delivery, replace
 
+*** Readjustment prices from OCP Costa Rica
+import excel "data/raw/reajusteprecios_ocpcr.xlsx", sheet("Export") firstrow clear
+rename (Númerodeprocedimiento NúmerodeLíneadeContrato PrecioAdjudicado NúmerodeReajuste MontodelReajuste PrecioAnteriorÚltimoReajuste NuevoPrecio deIncrImentodelÚltimoReaju) (tender_id line p_adj numero_reajuste monto_reajuste precio_anterior new_price perc_change)
+keep tender_id line p_adj numero_reajuste monto_reajuste precio_anterior new_price perc_change
+
+collapse (max) numero_reajuste (sum) precio_anterior new_price  (mean) perc_change, by(tender_id line)
+
+save data/temp/reajusteprecios, replace
+
 *****
 * SICOP CONTRACTS
 *****
@@ -176,6 +185,7 @@ replace municipality = strupper(municipality)
 drop if line == .
 drop if municipality == ""
 
+sort municipality firm_id tender_id
 egen ID = group(tender_id municipality firm_id) 
 
 collapse (first) tender_id TipodeProcedimiento municipality DescripcióndeProcedimiento Códigodeproducto BienServicio Monedaadjudicada Fechasolicitudcontratación firm_id Cédularepresentante Representante TipoEmpresa ObjetodelGasto (sum) MontoAdjudicado MontoUnitario, by(ID)
@@ -253,6 +263,7 @@ drop if _merge ==  2
 drop _merge
 replace MontoAdjudicado = MontoAdjudicado*venta if Monedaadjudicada == "USD"
 replace MontoUnitario = MontoUnitario*venta if Monedaadjudicada == "USD"
+drop if Monedaadjudicada == "EUR"
 
 * Merge price index
 merge m:1 month using data/temp/price_index
@@ -272,10 +283,6 @@ gen temp = substr(rep_id,1,1)
 replace rep_id = substr(rep_id,2,.) if temp == "0"
 drop temp
 cap drop _merge
-merge m:1 rep_id using data/temp/donations
-drop if _merge == 2
-gen donate = (_merge == 3)
-drop _merge
 
 encode municipality, gen(mun_id)
 keep if inrange(date,td(1apr2020),td(1apr2024))
@@ -400,19 +407,6 @@ collapse perc_response, by(term month)
 tw line perc_response month if term == 0 || line perc_response month if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
 restore
 
-
-* Figure 5: Evolution of donations when 2022 
-preserve 
-gen t1 = year(dntn_date)
-gen t2 = quarter(dntn_date)
-gen dntn_quarter = yq(t1,t2)
-format dntn_quarter 
-drop t1 t2 
-format dntn_quarter %tq
-collapse (sum) dntn , by(term dntn_quarter)
-tw line dntn dntn_quarter if term == 0 || line dntn dntn_quarter if term == 1, tline(2022m3)
-restore
-
 * Figure 6: Evolution of contracts that won from a donator
 preserve 
 collapse donate , by(term month)
@@ -430,9 +424,9 @@ restore
 * Figure 8: Evolution of the price of contracts
 preserve 
 cap gen one = 1
-collapse ln_price, by(term month)
-tw line ln_price month if term == 0 || line ln_price month if term == 1, tline(2022m3) graphregion(color(white)) legend(label(1 "First term") label(2 "Lame duck"))
-graph export "figures/lineplot_price.pdf", as(pdf) name(Graph) replace
+collapse ln_price, by(term quarter)
+tw line ln_price quarter if term == 0 || line ln_price quarter if term == 1, tline(2022m3) graphregion(color(white)) legend(label(1 "First term") label(2 "Lame duck"))
+*graph export "figures/lineplot_price.pdf", as(pdf) name(Graph) replace
 restore
 
 ** Figure 9: Evolution of mean firm size
@@ -441,3 +435,11 @@ drop if pyme == .
 collapse pyme, by(term quarter)
 tw line pyme quarter if term == 0 || line pyme quarter if term == 1 , tline(2022m3) legend(label(1 "First term") label(2 "Lame duck"))
 restore
+
+*** Figure 10: Evolution of income 
+preserve
+collapse (mean) corriente capital, by(term year)
+tw line corriente year if term == 0 || line corriente year if term == 1 || line capital year if term == 0 || line capital year if term == 1
+restore
+
+

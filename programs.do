@@ -100,30 +100,32 @@ gen e_3 = (event_time == 3) * term
 gen e_4 = (event_time == 4) * term
 gen e_5 = (event_time == 5) * term
 gen e_6 = (event_time == 6) * term
+gen e_7 = (event_time == 7) * term
+
 
 estimates clear
 
-reghdfe `outcome' e_m4 e_m3 e_m2 e_m1 e_1 e_2 e_3 e_4 e_5 e_6, absorb(`controls') cluster(mun_id)
+reghdfe `outcome' e_m4 e_m3 e_m2 e_m1 e_1 e_2 e_3 e_4 e_5 e_6 e_7, absorb(`controls') cluster(mun_id)
 
 // Store coefficients and standard errors
 matrix b = e(b)
 matrix V = e(V)
 
 // Insert omitted category (e_m0 = 0)
-matrix b = (b[1, 1..4], 0, b[1, 5..10]) 
+matrix b = (b[1, 1..4], 0, b[1, 5..11]) 
 
 // Expand variance-covariance matrix to include e_m0
-matrix V = (V[1..4,1..4], J(4,1,0), V[1..4,5..10] \ ///
-            J(1,4,0), 0, J(1,6,0) \ ///
-            V[5..10,1..4], J(6,1,0), V[5..10,5..10]) 
+matrix V = (V[1..4,1..4], J(4,1,0), V[1..4,5..11] \ ///
+            J(1,4,0), 0, J(1,7,0) \ ///
+            V[5..11,1..4], J(7,1,0), V[5..11,5..11]) 
 
 // Create a coefplot using stored coefficients
 coefplot (matrix(b), v(V)), ///
-         keep(e_m4 e_m3 e_m2 e_m1 e_m0 c5 e_1 e_2 e_3 e_4 e_5 e_6) ///
+         keep(e_m4 e_m3 e_m2 e_m1 e_m0 c5 e_1 e_2 e_3 e_4 e_5 e_6 e_7) ///
          vertical omitted ///
          coeflabels(e_m4 = "-4" e_m3 = "-3" e_m2 = "-2" e_m1 = "-1" ///
                     c5 = "0" e_1 = "1" e_2 = "2" e_3 = "3" e_4 = "4" ///
-                    e_5 = "5" e_6 = "6") ///
+                    e_5 = "5" e_6 = "6" e_7 = "7") ///
          xline(5, lcolor(red))  ///
          ciopts(recast(rcap) lcolor(black)) ///
          graphregion(color(white)) ytitle(`outcome') xtitle("Quarters from treatment")
@@ -131,5 +133,6 @@ coefplot (matrix(b), v(V)), ///
 	sleep 5000	
 
 end
+
 
 

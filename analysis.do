@@ -6,9 +6,29 @@ cd "C:/Users/alove/Desktop/thesis"
 
 use data/final/final_dta, clear
 
-global outcomes bidders ln_price ln_unit_price perc_response delay_days DifAdjudicaciónDías pyme 
+global outcomes bidders perc_response delay_days DifAdjudicaciónDías pyme 
+winsor2 ln_price, cuts(5 95) by(year)
 
 estimates clear
+
+* MAIN RESULTS : INCREASE IN GENERAL PRICES
+
+	dis "Estimating effects for: ln_price"
+	reghdfe ln_price treat11, absorb(mun_id short_quarter year) cluster(mun_id)
+	estimates store ln_price
+	
+	dis "Estimating effects for: ln_price"
+	reghdfe ln_unit_price treat11, absorb(mun_id short_quarter year) cluster(mun_id)
+	estimates store ln_unit_price
+	
+	
+	* Event study
+	q_event_study, outcome(ln_price) controls(mun_id short_quarter year exp_type_3dig) 
+
+	
+	* Alternative outcomes
+preserve
+collapse (first) $outcomes mun_id short_quarter year exp_type* treat11, by(tender_id)
 
 * BASIC DID - OPTION TO REELECT
 foreach i in $outcomes {
@@ -23,8 +43,9 @@ tabstat ${outcomes}
 
 * Event study
 foreach i in $outcomes {
-event_study, outcome(`i') controls(mun_id short_quarter year exp_type_1dig) 
-graph export "figures/`i'_eventstudy.pdf", as(pdf) name(Graph) replace
+	keep if exp_type_3dig == 104
+q_event_study, outcome(`i') controls(mun_id short_quarter year exp_type_1dig) 
+*graph export "figures/`i'_eventstudy.pdf", as(pdf) name(Graph) replace
 } 
 
 * Heterogeneous Analysis
@@ -102,39 +123,6 @@ reghdfe ln_price treat11, ///
 restore
 
 ***************************************************************
-***************************************************************
-******  What Mechanisms Explain the Rise in Prices? ***********
-***************************************************************
-***************************************************************
-
-preserve
-use data/final/final_dta, clear
-bysort month mun_id : gen contracts = _N
-bysort month mun_id firm_id: gen links = _N
-gen market_share = floor((links/contracts)*100)
-bysort month mun_id market_share: gen firms = _N
-
-collapse (first) year short_month firms, by(municipality mun_id month market_share)
-gen index = market_share^2 * firms
-
-collapse (first) short_month year (sum) index, by(municipality mun_id month)
-
-treatment
-gen time = (month > tm(2022m3))
-gen treat = term*time
-
-preserve
-collapse index, by(term month)
-tw line index month if term == 0 || line index month if term == 1
-restore
-* Main regression
-reghdfe index treat, absorb(mun_id year short_month) cluster(mun_id)
-
-event_study, outcomes(index)
-restore
-
-
-***************************************************************
 ************ RANDOM TREATMENT CHECKS **************************
 ***************************************************************
 quiet{
@@ -178,6 +166,32 @@ twoway line cdf_test test, sort xline(0.118) ylabel(, grid) graphregion(color(wh
 
 graph export "figures/random_check_ln_price.pdf", as(pdf) name(Graph) replace
 
+***************************************************************
+***************************************************************
+******  What Mechanisms Explain the Rise in Prices? ***********
+***************************************************************
+***************************************************************
 
+use data/final/final_dta, clear
+keep if exp_type_2dig == 104
+bysort month mun_id : gen contracts = _N
+bysort month mun_id firm_id: gen links = _N
+gen market_share = floor((links/contracts)*100)
+bysort month mun_id market_share: gen firms = _N
+
+collapse (first) year short_month firms, by(municipality mun_id month market_share)
+gen index = market_share^2 * firms
+
+collapse (first) short_month year (sum) index, by(municipality mun_id month)
+
+treatment
+gen time = (month > tm(2022m3))
+gen treat = term*time
+
+collapse index, by(municipality month)
+tw line index quarter if term == 0 || line index quarter if term == 1
+restore
+* Main regression
+reghdfe index treat, absorb(mun_id year short_month) cluster(mun_id)
 
 

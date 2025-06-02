@@ -28,19 +28,19 @@ estimates clear
 reghdfe ln_price treat, absorb(mun_id quarter short_quarter) cluster(mun_id)
 est store ln_price
 
-reghdfe ln_price treat, absorb(mun_id short_quarter year exp_type_2dig firm_type) cluster(mun_id)
+reghdfe ln_price treat, absorb(mun_id short_quarter year exp_type_3dig firm_type) cluster(mun_id)
 est store ln_price_c
 * reelect
 reelec
 cap gen time = (quarter>=tq(2022q2))
 replace reelec = reelec*time
-reghdfe ln_price reelec, absorb(short_quarter year mun_id exp_type_2dig firm_type) cluster(mun_id)
+reghdfe ln_price reelec, absorb(short_quarter year mun_id exp_type_3dig firm_type) cluster(mun_id)
 
 * Table Main
-esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01)
+esttab * using "tables/main_prices.tex", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
 
 * Winsorize prices
-reghdfe ln_price_w treat, absorb(mun_id year short_quarter exp_type_2dig firm_type) cluster(mun_id)
+reghdfe ln_price_w treat, absorb(mun_id year short_quarter exp_type_3dig firm_type) cluster(mun_id)
 est store ln_price_w_c
 
 * Removing top gdp municipalities
@@ -48,19 +48,20 @@ cap gen ln_price_low = ln_price
 
 replace ln_price_low = . if inlist(municipality,"BELEN","CURRIDABAT","SANTA ANA","ESCAZU")
 
-reghdfe ln_price_low treat, absorb(mun_id short_quarter year exp_type_2dig firm_type) cluster(mun_id)
+reghdfe ln_price_low treat, absorb(mun_id short_quarter year exp_type_3dig firm_type) cluster(mun_id)
 est store ln_price_low_c
 
 * Restricted sample
 preserve
 drop if inlist(municipality,"ABANGARES","DOTA","GUATUSO","JIMENEZ","LA CRUZ","LEON CORTES","MONTES DE ORO")
 drop if inlist(municipality,"NICOYA","NANDAYURE","PUNTARENAS","SAN PABLO","SIQUIRRES")
-reghdfe ln_price treat, absorb(mun_id year short_quarter exp_type_2dig firm_type) cluster(mun_id)
+reghdfe ln_price treat, absorb(mun_id year short_quarter exp_type_3dig firm_type) cluster(mun_id)
 tabstat ln_price
 restore
 
 * Table Robust
-esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01)
+esttab *
+esttab * using "tables/robust.tex", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
 
 tabstat ln_price ln_price_low ln_price_w
 estimates clear
@@ -115,12 +116,14 @@ estimates clear
 foreach i in $mechanism {
 	
 	dis "Estimating effects for: `i'"
-	qui reghdfe `i' treat, absorb(mun_id year short_quarter) cluster(mun_id)
+	qui reghdfe `i' treat, absorb(mun_id year short_quarter exp_type_2dig firm_type) cluster(mun_id)
 	estimates store `i'
 	
 }
 * Table Mechanisms
-esttab* , keep(treat) star(* 0.10 ** 0.05 *** 0.01) se
+esttab*, se
+
+esttab * using "tables/mechanisms.tex", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
 
 tabstat ${mechanism}, s(mean median)
 
@@ -168,7 +171,7 @@ xteventplot, nosupt graphregion(color(white))
 graph export "figures/ln_price_`i'_eventstudy.pdf", as(pdf) name(Graph) replace
 restore
 }
-esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01) se
+esttab * using "tables/exp_type_2dig.tex", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
 
 
 use data/final/final_dta, clear
@@ -178,6 +181,8 @@ estimates clear
 foreach i in 101 103 104 107 108 201 203 204 299 501 502 {
 preserve 
 keep if exp_type_3dig == `i'
+tab contract_type, gen(ct)
+tabstat ct*
 cap gen one =1 
 collapse (mean) ln_price year term short_quarter first_term $mechanism (sum) one, by(mun_id quarter)
 xtset mun_id quarter, quarterly
@@ -199,7 +204,7 @@ graph export "figures/ln_price_`i'_eventstudy.pdf", as(pdf) name(Graph) replace
 restore
 }
 
-esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01) se
+esttab * using "tables/exp_type_3dig", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
 
 *************************
 * Heterogeneous Analysis by Contract Type
@@ -233,7 +238,7 @@ restore
 }
 
 dis "Results of the effect by expenditure type"
-esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01)
+esttab * using "tables/contract_type.tex", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
 
 
 ***************************************************************
@@ -242,6 +247,7 @@ esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01)
 quiet{
 forvalues i = 1(1)1000 {
 use data/final/final_dta, replace
+set seed 12071999
 preserve
 tempfile test
 collapse term, by(mun_id)
@@ -341,13 +347,15 @@ foreach j in index max_MS firm_id {
 xtevent `j', policyvar(treat) reghdfe addabsorb(short_quarter year) window(max) imput(stag) 
 
 xteventplot, nosupt graphregion(color(white))
-graph export "`j'_eventstudy.pdf", as(pdf) name(Graph) replace
+graph export "figures/`j'_eventstudy.pdf", as(pdf) name(Graph) replace
 
 }
 
-esttab *, keep(treat) star(* 0.10 ** 0.05 *** 0.01)
+esttab * using "tables/market.tex", keep(treat) star(* 0.10 ** 0.05 *** 0.01) se booktabs replace
+
+
 *********************************************************************
-* Placebo checks
+* Placebo Tests
 ********************************************************************
 use data/final/final_dta, clear
 
